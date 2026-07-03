@@ -1,0 +1,128 @@
+# White Rabbit denied patterns (POSIX extended regex). Any match => command DENIED.
+# Leading boundary (^|[^[:alnum:]_.-]) treats / as a boundary so full-path binaries
+# like /bin/rm are caught, while innocent path components (e.g. /firmware, /etc/term)
+# are not — the char before the command-name substring is alphanumeric there.
+
+# --- filesystem mutation ---
+(^|[^[:alnum:]_.-])rm([[:space:]]|$)
+(^|[^[:alnum:]_.-])rmdir([[:space:]]|$)
+(^|[^[:alnum:]_.-])mv([[:space:]]|$)
+(^|[^[:alnum:]_.-])cp([[:space:]]|$)
+(^|[^[:alnum:]_.-])dd([[:space:]]|$)
+(^|[^[:alnum:]_.-])mkfs
+(^|[^[:alnum:]_.-])truncate([[:space:]]|$)
+(^|[^[:alnum:]_.-])shred([[:space:]]|$)
+(^|[^[:alnum:]_.-])ln([[:space:]]|$)
+(^|[^[:alnum:]_.-])touch([[:space:]]|$)
+(^|[^[:alnum:]_.-])mkdir([[:space:]]|$)
+(^|[^[:alnum:]_.-])find[[:space:]].*(-delete|-exec|-execdir|-fprint|-fls|-ok|-okdir)
+
+# --- permissions / ownership ---
+(^|[^[:alnum:]_.-])chmod([[:space:]]|$)
+(^|[^[:alnum:]_.-])chown([[:space:]]|$)
+(^|[^[:alnum:]_.-])chattr([[:space:]]|$)
+
+# --- in-place editors ---
+(^|[^[:alnum:]_.-])sed[[:space:]]+-[a-zA-Z]*i
+(^|[^[:alnum:]_.-])perl[[:space:]]+.*-i
+
+# --- process / power control ---
+(^|[^[:alnum:]_.-])kill([[:space:]]|$)
+(^|[^[:alnum:]_.-])pkill([[:space:]]|$)
+(^|[^[:alnum:]_.-])killall([[:space:]]|$)
+(^|[^[:alnum:]_.-])reboot([[:space:]]|$)
+(^|[^[:alnum:]_.-])shutdown([[:space:]]|$)
+(^|[^[:alnum:]_.-])halt([[:space:]]|$)
+(^|[^[:alnum:]_.-])poweroff([[:space:]]|$)
+
+# --- service control ---
+systemctl[[:space:]]+(stop|start|restart|reload|enable|disable|mask|unmask|kill|edit|set-property|set-default|set-environment|unset-environment|import-environment|isolate|switch-root|kexec|daemon-reload|daemon-reexec|suspend|hibernate|hybrid-sleep|link|revert|reenable|preset-all|preset|add-wants|add-requires|clean)
+(^|[^[:alnum:]_.-])service[[:space:]]+[^[:space:]]+[[:space:]]+(stop|start|restart|reload)
+
+# --- firewall mutation ---
+iptables[[:space:]]+-[ADIRFXNPZ]
+ip6tables[[:space:]]+-[ADIRFXNPZ]
+nft[[:space:]]+(add|delete|flush|insert|replace|create)
+ufw[[:space:]]+(allow|deny|reject|limit|enable|disable|delete|reset)
+
+# --- kernel params ---
+sysctl[[:space:]]+-w
+
+# --- cron mutation ---
+crontab[[:space:]]+-[rei]
+
+# --- package management mutation ---
+(^|[^[:alnum:]_.-])(apt|apt-get|aptitude|yum|dnf|zypper|pacman|snap|pip|pip3|npm|gem|cargo|go)[[:space:]]+(install|remove|purge|update|upgrade|add|get|uninstall|erase|reinstall|downgrade|autoremove|groupinstall|groupremove|localinstall)
+
+# --- privilege escalation ---
+(^|[^[:alnum:]_.-])sudo([[:space:]]|$)
+(^|[^[:alnum:]_.-])su([[:space:]]|$)
+(^|[^[:alnum:]_.-])doas([[:space:]]|$)
+
+# --- piped writes / arbitrary eval ---
+(^|[^[:alnum:]_.-])tee([[:space:]]|$)
+(^|[^[:alnum:]_.-])eval([[:space:]]|$)
+
+# --- write/mutation via allowlisted tools ---
+# openssl writing a file via -out/-keyout/-writerand, or rehash (writes symlinks);
+# read-only inspection never needs these.
+openssl[[:space:]][^|&;]*[[:space:]]-(out|keyout|writerand)([[:space:]]|=|$)
+openssl[[:space:]]+rehash
+# ip mutating subcommands (read uses are show/list/get)
+(^|[^[:alnum:]_.-])ip([[:space:]]+-[a-zA-Z0-9]+)*[[:space:]]+(link|addr|address|route|rule|neigh|maddr|mroute|tunnel|tuntap|netns|xfrm|token)[[:space:]]+(add|del|delete|set|change|replace|flush|append|prepend)([[:space:]]|$)
+# ip netns exec runs a local command; ip -batch/--batch executes ip commands from a file
+(^|[|&;])[[:space:]]*ip([[:space:]]+[^|&;[:space:]]+)*[[:space:]]+netns[[:space:]]+exec([[:space:]]|$)
+(^|[|&;])[[:space:]]*ip([[:space:]]+[^|&;[:space:]]+)*[[:space:]]+(-batch|--batch)([[:space:]]|$)
+# ssh carrying a local-command option (ProxyCommand/LocalCommand run on the auditor host)
+(^|[|&;])[[:space:]]*ssh[^|&;]*[[:space:]]-o[[:space:]]*(ProxyCommand|LocalCommand|PermitLocalCommand)
+
+# --- additional mutating binaries ---
+(^|[^[:alnum:]_.-])unlink([[:space:]]|$)
+(^|[^[:alnum:]_.-])install([[:space:]]|$)
+(^|[^[:alnum:]_.-])mount([[:space:]]|$)
+(^|[^[:alnum:]_.-])umount([[:space:]]|$)
+(^|[^[:alnum:]_.-])mknod([[:space:]]|$)
+(^|[^[:alnum:]_.-])mkfifo([[:space:]]|$)
+(^|[^[:alnum:]_.-])mkswap([[:space:]]|$)
+(^|[^[:alnum:]_.-])swapon([[:space:]]|$)
+(^|[^[:alnum:]_.-])swapoff([[:space:]]|$)
+(^|[^[:alnum:]_.-])setfacl([[:space:]]|$)
+(^|[^[:alnum:]_.-])chgrp([[:space:]]|$)
+# --- user / group / credential mutation ---
+# passwd omitted: /etc/passwd in any read command false-positives; passwd binary already denied by allowlist
+(^|[^[:alnum:]_.-])(useradd|userdel|usermod|groupadd|groupdel|groupmod|gpasswd|chsh|chfn|chpasswd|adduser|deluser|newusers)([[:space:]]|$)
+# --- mutation subcommands of allowlisted tools ---
+hostnamectl[[:space:]]+set
+timedatectl[[:space:]]+set
+crontab([[:space:]]+-u[[:space:]]+[^[:space:]]+)?[[:space:]]+[^-[:space:]]
+
+# --- write flags / mutating subcommands of allowlisted tools (convergence pass) ---
+# hostname NAME sets the hostname (reads use -f/-I/-s/-d/-i flags, all dash-led).
+# Command-position-anchored so `cat /etc/hostname /etc/hosts` (hostname as a path arg) is NOT denied.
+(^|[|&;])[[:space:]]*hostname[[:space:]]+[^-[:space:]]
+# sort -o / --output writes a file (anchored to sort's flag region so `... | grep -o` is unaffected)
+(^|[^[:alnum:]_.-])sort([[:space:]]+-[a-zA-Z]+)*[[:space:]]+(-o([[:space:]]|$)|--output)
+# sshd in any start form (bare, -D, -p, -f, -o, -e, -ddd, trailing operator) starts the daemon;
+# only sshd -t (test config) and sshd -T (dump config) are reads. Anchored to command position
+# (start of string or just after a pipe/control operator) so `systemctl status sshd` and
+# `cat /etc/ssh/sshd_config` (sshd as an argument/filename) are NOT denied.
+(^|[|&;])[[:space:]]*sshd([[:space:]]+-[^tT]|[[:space:]]*($|[|&;]))
+# dpkg install/remove/configure (dpkg flags are not letter-bundled, so exact match is safe)
+(^|[^[:alnum:]_.-])dpkg[[:space:]]+(-i|-r|-P|-A|--install|--remove|--purge|--unpack|--configure|--record-avail|--clear-avail)([[:space:]]|$)
+# rpm clear write forms (short -e/-U/-F never appear in query (-q) clusters; long forms unambiguous)
+(^|[^[:alnum:]_.-])rpm[[:space:]]+(-i|-e|-U|-F|--install|--upgrade|--freshen|--erase|--reinstall|--import)([[:space:]]|$)
+# journalctl log mutation (rotate/vacuum/flush/sync/relinquish/update-catalog/setup-keys)
+journalctl[[:space:]]+(--rotate|--vacuum|--flush|--sync|--relinquish-var|--update-catalog|--setup-keys)
+# sysctl key=value write (anchored to sysctl's arg region so `sysctl -a | grep x=y` is unaffected)
+(^|[^[:alnum:]_.-])sysctl([[:space:]]+-[a-zA-Z]+)*[[:space:]]+[a-zA-Z0-9._/-]+=
+# sysctl loading settings from a file / the whole system
+(^|[^[:alnum:]_.-])sysctl[[:space:]]+(-p|--load|--system)([[:space:]]|$)
+# iptables/ip6tables long-form mutation (short -A/-D/... already covered above)
+ip6?tables[[:space:]]+--(append|delete|insert|replace|flush|new-chain|delete-chain|rename-chain|policy|zero)
+# nft load ruleset from a file / interactive shell
+nft[[:space:]]+(-f|--file|-i|--interactive)([[:space:]]|$)
+# crontab install from stdin (the bare-dash form; the from-file form is denied above)
+crontab([[:space:]]+-u[[:space:]]+[^[:space:]]+)?[[:space:]]+-([[:space:]]|$)
+# date setting the system clock (reads: date, +FORMAT, -u/-d/-r/-I…)
+(^|[|&;])[[:space:]]*date[^|&;]*[[:space:]](-s|--set)([[:space:]]|=|$)
+(^|[|&;])[[:space:]]*date[[:space:]]+[0-9]

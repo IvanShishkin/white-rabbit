@@ -1,0 +1,95 @@
+# White Rabbit read-only allowlist.
+# The first token (binary, after stripping any leading VAR=val and path) of every
+# pipeline segment must appear here, or the command is denied. One bare name per line.
+
+# --- transport ---
+ssh
+
+# --- file/text reading ---
+cat
+zcat
+zgrep
+head
+tail
+ls
+stat
+file
+find
+readlink
+realpath
+dirname
+basename
+grep
+egrep
+fgrep
+cut
+tr
+sort
+uniq
+wc
+column
+echo
+printf
+true
+test
+date
+
+# --- host / identity ---
+uname
+hostname
+hostnamectl
+uptime
+id
+whoami
+who
+w
+last
+lastlog
+groups
+getent
+
+# --- processes / resources ---
+ps
+free
+df
+du
+lsblk
+findmnt
+lsof
+
+# --- network / firewall (read subcommands only; mutations blocked by denylist) ---
+ss
+netstat
+ip
+iptables
+ip6tables
+nft
+ufw
+sysctl
+
+# --- packages (read subcommands only; install/remove blocked by denylist) ---
+dpkg
+dpkg-query
+rpm
+apt
+apt-cache
+yum
+dnf
+
+# --- services / logs / cron (read subcommands only) ---
+systemctl
+journalctl
+crontab
+
+# --- crypto / dns / misc ---
+sshd
+openssl
+dig
+host
+nslookup
+jq
+
+# NOTE: White Rabbit's own analysis scripts (scripts/analyze/correlate.sh, scripts/analyze/
+# cve_scan.sh) are NOT allowlisted
+# by basename here — that would let any same-named file bypass the guard. They are allowed by
+# exact canonical path in hooks/guard.sh instead (see WR_CORRELATOR / WR_CVE_SCANNER).

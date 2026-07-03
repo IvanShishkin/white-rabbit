@@ -1,0 +1,29 @@
+# Секреты и реальные таргеты (никогда не коммитим)
+targets/targets.yaml
+targets/*.local.yaml
+targets/vex.txt
+*.pem
+*.key
+.env
+.env.*
+
+# Результаты прогонов / находки / бейзлайны
+reports/*
+!reports/.gitkeep
+
+# Системное
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+
+# Superpowers SDD scratch
+.superpowers/
+
+# Extensions: user symlinks to external agent projects (never committed)
+extensions/*
+!extensions/README.md
+
+# User-managed local allowlist for extension binaries
+policy/allowed-commands.local.txt

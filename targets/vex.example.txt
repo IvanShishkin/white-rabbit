@@ -1,0 +1,9 @@
+# White Rabbit VEX file — accepted / not-applicable CVEs, one rule per line.
+# Copy to targets/vex.txt (git-ignored with your real targets) to activate.
+#
+# Format:  <CVE-id> <source-package|*> <justification…>
+# The scanner turns a matching WR-CVE finding into a WR-CVE-SUPPRESSED line that
+# still shows the justification — acceptance stays visible and reviewable.
+#
+# CVE-2025-4444 vim dev-only editor, host not exposed
+# CVE-2025-2222 * accepted until the Q3 patch window (change ticket OPS-123)

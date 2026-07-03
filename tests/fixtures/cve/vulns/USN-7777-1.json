@@ -1,0 +1,15 @@
+{
+  "id": "USN-7777-1",
+  "summary": "vim heap overflow via crafted modeline",
+  "aliases": [ "CVE-2025-4444" ],
+  "affected": [
+    {
+      "package": { "ecosystem": "Ubuntu:24.04:LTS", "name": "vim" },
+      "ranges": [
+        { "type": "ECOSYSTEM",
+          "events": [ { "introduced": "0" }, { "fixed": "2:9.1.0016-1ubuntu7.8" } ] }
+      ]
+    }
+  ],
+  "database_specific": { "severity": "Low" }
+}

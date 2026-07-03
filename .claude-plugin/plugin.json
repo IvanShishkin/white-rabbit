@@ -1,0 +1,12 @@
+{
+  "name": "white-rabbit",
+  "displayName": "White Rabbit",
+  "description": "Read-only white-box security audit copilot. Orchestrates native, read-only data collection over SSH and triages findings by real-world exploitability.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Ivan Shishkin",
+    "email": "shishkin.tech@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["security", "audit", "read-only", "hardening", "ssh", "logs"]
+}

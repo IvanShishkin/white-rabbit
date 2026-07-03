@@ -1,0 +1,8 @@
+# White Rabbit — target inventory (EXAMPLE).
+# Copy this file to targets/targets.yaml (git-ignored) and fill in real hosts.
+# White Rabbit is strictly read-only and never modifies these hosts.
+targets:
+  - name: example-vm
+    host: youruser@your.server.example   # user@host for SSH (path A: zero-install)
+    profile: server                       # audit domains: server | logs
+    description: "Replace with a real host in your git-ignored targets.yaml"
