@@ -67,6 +67,20 @@ secrets) over HTTPS from the auditor to OSV.dev / FIRST.org / CISA; if a source 
 degrades with a note — report "no CVE data", never "no CVEs". If the snapshot has no
 `packages` section (collector v3 dump), the scanner says so; note it in Coverage and move on.
 
+## Step 3c — Service version currency / EOL check
+Run the service-EOL checker on the same snapshot, from the repo root via its exact canonical path
+(guard-allowed; do not `bash …` it):
+```
+scripts/analyze/service_eol.sh reports/<DATE>-<host>-full/snapshot.txt
+```
+It emits a `service_eol` section (`WR-EOL: <product> <installed> cycle=… eol=… latest=… status=eol|outdated|current`)
+by checking network-facing services (nginx, apache, php, mysql, mariadb, postgresql, redis, nodejs,
+openssl) against endoflife.date from the auditor side (public data; degrades with a note if a
+product is unknown or the source is down). **This is the deterministic catch for outdated/EOL
+services that the CVE scan misses on an EOL host** — an unsupported public-facing daemon here is
+often the most concrete finding. Triage with `knowledge/checks/service-eol.md`, cross-referencing
+`listening`: an `status=eol` service bound to `0.0.0.0`/`[::]` on a public port is **critical**.
+
 ## Step 4 — Triage every domain
 Apply each catalog to its dump sections (same rules the per-domain skills use):
 - server: `knowledge/checks/{ssh,firewall,ports,access,persistence,patching,sysctl,docker}.md`
@@ -74,6 +88,8 @@ Apply each catalog to its dump sections (same rules the per-domain skills use):
 - web logs: `knowledge/checks/web-log.md`
 - cross-surface: `knowledge/checks/correlation.md`
 - cve: `knowledge/checks/cve.md` → the scanner's `cve` section (kev=yes → critical, patch today)
+- service currency: `knowledge/checks/service-eol.md` → the `service_eol` section (status=eol on a
+  public port → critical; pair it with the cve blind-spot as proof "clean scan ≠ safe")
 - `knowledge/severity.md` for the rubric and context rules.
 Carry over the key single-surface correlations too (Docker published port + active ufw → still open;
 sensitive path + 2xx → confirmed exposure; SSH success from a brute-forcing IP → possible breach).

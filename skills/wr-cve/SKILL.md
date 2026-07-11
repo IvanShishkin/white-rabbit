@@ -50,6 +50,15 @@ It emits a `cve` section: `WR-CVE: <pkg> <installed> <cve-id> sev=… epss=… k
 lines sorted critical→low, `WR-CVE-SUPPRESSED:` lines (VEX rules from `targets/vex.txt`),
 and `WR-NOTE:` caveats (ecosystem, degraded sources, no-fix counts).
 
+Then run the **service version currency / EOL** check on the same snapshot (canonical path only):
+```
+scripts/analyze/service_eol.sh <the snapshot.txt path resolved in Step 2>
+```
+It emits `WR-EOL: <product> <installed> cycle=… eol=… latest=… status=eol|outdated|current` for
+network-facing services checked against endoflife.date. **This is the deterministic catch OSV
+misses on an EOL host** — an unsupported nginx/php/mysql/openssl/node is a real finding even when
+the CVE scan returns zero matches. Triage with `knowledge/checks/service-eol.md`.
+
 ## Step 4 — Triage
 Apply `knowledge/checks/cve.md` and `knowledge/severity.md`. Key rules:
 - `kev=yes` → critical, patch today; lead the report with these.
