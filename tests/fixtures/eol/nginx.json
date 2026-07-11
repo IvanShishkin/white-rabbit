@@ -1,0 +1,5 @@
+[
+  { "cycle": "1.31", "eol": false, "latest": "1.31.2" },
+  { "cycle": "1.30", "eol": false, "latest": "1.30.3" },
+  { "cycle": "1.14", "eol": "2019-04-23", "latest": "1.14.2" }
+]

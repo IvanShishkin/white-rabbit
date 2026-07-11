@@ -40,8 +40,22 @@ ssh <target> 'bash -s' < scripts/collect/server_snapshot.sh
   set it. Shadow hashes and SSH key blobs are never emitted — only presence/comments.
 - Save the raw dump to `reports/<DATE>-<host>-server/snapshot.txt` using the file-write tool.
 
+## Step 2b — Service version currency / EOL check
+Run the service-EOL checker on the snapshot from the repo root via its exact canonical path
+(guard-allowed; do not `bash …` it):
+```
+scripts/analyze/service_eol.sh reports/<DATE>-<host>-server/snapshot.txt
+```
+It emits `WR-EOL: <product> <installed> cycle=… eol=… latest=… status=eol|outdated|current` for
+network-facing services (nginx, apache, php, mysql, mariadb, postgresql, redis, nodejs, openssl)
+checked against endoflife.date. **Prefer these deterministic results over judging version age from
+memory** — they catch outdated/EOL services reliably. Degrades with a note if a product is unknown
+or the source is down (report "not checked", never "current").
+
 ## Step 3 — Triage
 Read these catalogs and apply them to the matching dump sections:
+- `knowledge/checks/service-eol.md`  → the `service_eol` section (status=eol on a public port,
+  cross-checked with `listening`, is critical)
 - `knowledge/checks/ssh.md`         → `ssh_config` section
 - `knowledge/checks/firewall.md`    → `firewall` section
 - `knowledge/checks/ports.md`       → `listening` section
