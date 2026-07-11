@@ -56,3 +56,38 @@ guard_decision() {
   [ "$(guard_decision "/tmp/evil/validate_findings.sh a")" = "deny" ]
   [ "$(guard_decision "validate_findings.sh a")" = "deny" ]
 }
+
+@test "findings as a non-array (wrong type) fails, not OK" {
+  jq '.findings = "oops"' "$FIX" > "$TMP/f.json"
+  run bash "$SCRIPT" "$TMP/f.json"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'findings is not an array'
+}
+
+@test "summary as a non-object (wrong type) fails, not OK" {
+  jq '.summary = 5' "$FIX" > "$TMP/f.json"
+  run bash "$SCRIPT" "$TMP/f.json"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'summary is not an object'
+}
+
+@test "a duplicate finding id fails" {
+  jq '.findings[1].id = .findings[0].id' "$FIX" > "$TMP/f.json"
+  run bash "$SCRIPT" "$TMP/f.json"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'duplicate finding id'
+}
+
+@test "a missing required top-level key (posture) fails" {
+  jq 'del(.posture)' "$FIX" > "$TMP/f.json"
+  run bash "$SCRIPT" "$TMP/f.json"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'missing top-level key: posture'
+}
+
+@test "a finding missing mitre fails" {
+  jq 'del(.findings[0].mitre)' "$FIX" > "$TMP/f.json"
+  run bash "$SCRIPT" "$TMP/f.json"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q 'finding\[0\] missing key: mitre'
+}

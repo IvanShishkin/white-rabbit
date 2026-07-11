@@ -20,25 +20,46 @@ if ! jq -e . "$F" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Hard type gate: run BEFORE the main schema pass. If .findings or .summary
+# (or posture/surfaces) are PRESENT but the wrong type, the schema jq below
+# would abort mid-program and its error would be swallowed by 2>/dev/null,
+# falsely reporting OK. Fail loudly here instead.
+TYPEERR="$(jq -r '
+  [ (select((has("findings")) and ((.findings|type)!="array")) | "findings is not an array (type: \(.findings|type))"),
+    (select((has("summary")) and ((.summary|type)!="object"))  | "summary is not an object (type: \(.summary|type))"),
+    (select((has("posture")) and ((.posture|type)!="object"))  | "posture is not an object (type: \(.posture|type))"),
+    (select((has("surfaces")) and ((.surfaces|type)!="object")) | "surfaces is not an object (type: \(.surfaces|type))")
+  ] | .[]
+' "$F" 2>/dev/null)"
+
+if [ -n "$TYPEERR" ]; then
+  printf 'WR-VALIDATE: FAIL\n'
+  printf '%s\n' "$TYPEERR" | sed 's/^/WR-VALIDATE: /'
+  exit 1
+fi
+
 ERRORS="$(jq -r '
   def sev:      ["critical","high","medium","low","info"];
   def areas:    ["ssh","firewall","ports","access","persistence","patching","sysctl","docker","auth-log","web","cross","cve"];
   def statuses: ["new","unchanged","resolved"];
   [
-    (["target","collected","summary","findings"][] as $k | select((has($k))|not) | "missing top-level key: \($k)"),
+    (["target","collected","summary","findings","host","os","posture","surfaces"][] as $k | select((has($k))|not) | "missing top-level key: \($k)"),
     (["critical","high","medium","low","info"][] as $s
        | select((.summary[$s]? | type) != "number") | "summary.\($s) missing or not a number"),
     ((.findings // []) | to_entries[] | .key as $i | .value as $f
-       | (["id","severity","area","title","evidence","why","fix","status"][] as $k
+       | (["id","severity","area","title","evidence","why","fix","status","mitre"][] as $k
             | select(($f|has($k))|not) | "finding[\($i)] missing key: \($k)"),
          (select(($f.severity as $v | sev | index($v)) == null)      | "finding[\($i)] bad severity: \($f.severity)"),
          (select(($f.area as $v | areas | index($v)) == null)        | "finding[\($i)] bad area: \($f.area)"),
          (select(($f.status as $v | statuses | index($v)) == null)   | "finding[\($i)] bad status: \($f.status)"),
-         (select(($f.evidence? | type) != "array")                  | "finding[\($i)] evidence not an array")),
+         (select(($f|has("evidence")) and (($f.evidence|type)!="array")) | "finding[\($i)] evidence not an array")),
     (["critical","high","medium","low","info"][] as $s
        | ((.findings // []) | map(select(.severity==$s)) | length) as $actual
        | select((.summary[$s]? // -1) != $actual)
-       | "summary.\($s)=\(.summary[$s]) but findings has \($actual)")
+       | "summary.\($s)=\(.summary[$s]) but findings has \($actual)"),
+    ((.findings // []) | map(.id) ) as $ids
+       | ($ids | group_by(.) | map(select(length>1) | .[0])) as $dups
+       | $dups[] | "duplicate finding id: \(.)"
   ] | .[]
 ' "$F" 2>/dev/null)"
 
