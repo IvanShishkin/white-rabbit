@@ -71,6 +71,10 @@ Markdown, sorted by severity; show it in chat AND save to
   After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-cve/findings.json`
   and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
   per-severity tally of `findings[]`.
+- **Then render `report.html`** — once findings.json validates, run
+  `scripts/report/render_html.sh reports/<DATE>-<host>-cve/findings.json`, capture its stdout, and
+  save it as `reports/<DATE>-<host>-cve/report.html` with the file-write tool (never a `>`-redirect
+  — the guard blocks that). The renderer is deterministic, read-only, and self-contained.
 ```
 # White Rabbit — OS-package CVE check: <host>
 ecosystem: <from the cve section note> · collected: <date> · posture: strictly read-only

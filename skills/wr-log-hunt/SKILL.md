@@ -79,4 +79,8 @@ State plainly which surfaces did NOT run and why (blocked, unreachable, unprivil
   After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-logs/findings.json`
   and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
   per-severity tally of `findings[]`.
+- **Then render `report.html`** — once findings.json validates, run
+  `scripts/report/render_html.sh reports/<DATE>-<host>-logs/findings.json`, capture its stdout, and
+  save it as `reports/<DATE>-<host>-logs/report.html` with the file-write tool (never a `>`-redirect
+  — the guard blocks that). The renderer is deterministic, read-only, and self-contained.
 - If there are zero findings, say so and note what was checked (and how many events).
