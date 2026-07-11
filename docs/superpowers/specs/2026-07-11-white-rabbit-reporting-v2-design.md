@@ -43,19 +43,23 @@ rendering and diffing would each have to re-parse that prose — fragile.
 Replace flat `reports/<kind>-<host>-<date>.<ext>` with one directory per run:
 
 ```
-reports/<YYYY-MM-DD>-<host>/
+reports/<YYYY-MM-DD>-<host>-<kind>/     # kind ∈ full|server|logs|web|cve
   report.md          # human default — model-authored, unchanged in spirit
   report.html        # generated (Phase 2); strict, emoji-free
   findings.json      # structured sidecar — model emits alongside report.md
-  snapshot.txt       # raw server snapshot dump
-  logs.txt           # raw ssh-auth dump      (when collected)
-  web.txt            # raw web-access dump     (when collected)
-  cve.txt            # cve_scan.sh output
-  correlate.txt      # correlate.sh output     (when both log dumps exist)
+  snapshot.txt       # raw server snapshot dump (server/full/cve)
+  logs.txt           # raw ssh-auth dump      (logs/full)
+  web.txt            # raw web-access dump     (web/full)
+  cve.txt            # cve_scan.sh output      (cve/full)
+  correlate.txt      # correlate.sh output     (full, when both log dumps exist)
 ```
 
-- Directory name: **date first** (`2026-07-11-158.160.2.43`) so `ls` sorts chronologically.
+- Directory name: **date first** (`2026-07-11-158.160.2.43-full`) so `ls` sorts chronologically.
 - Host component is the target host/IP as given (same value used in report titles today).
+- **Kind suffix** disambiguates same-day runs of different audit domains on one host, so a
+  `/wr server` and a `/wr cve` on the same day do not overwrite each other's `report.md`.
+  `wr-cve` reuses an existing same-day `snapshot.txt` from a `-full`/`-server` bundle if present,
+  else collects its own into its `-cve` bundle.
 - Raw dumps lose the `<host>-<date>` suffix in their filename — the directory carries that
   context now. Filenames become stable (`snapshot.txt`, not `snapshot-<host>-<date>.txt`).
 - `reports/.gitkeep` stays; bundles remain gitignored as today.
