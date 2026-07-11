@@ -143,7 +143,13 @@ if [ -r "$R/etc/passwd" ]; then
       case " $seen_ak " in *" $f "*) continue;; esac
       # A missing file is genuinely "no keys"; an existing-but-unreadable one is a blind
       # spot under a non-root audit — read via run_ro and note it rather than skip silently.
-      if [ ! -e "$f" ]; then continue; fi
+      # `test -e` returns false BOTH when the file is absent AND when its parent .ssh is
+      # unsearchable (0700 owned by another user under a non-root audit) — the latter is a
+      # blind spot, not an absence. Only skip when we can actually confirm absence: the .ssh
+      # dir must not exist, or must be searchable by us. Otherwise fall through to the run_ro
+      # read + UNREADABLE path so a backdoor account's keys are never silently dropped.
+      akdir="$(dirname -- "$f")"
+      if [ ! -e "$f" ] && { [ ! -e "$akdir" ] || [ -x "$akdir" ]; }; then continue; fi
       content="$(run_ro cat "$f" 2>/dev/null)"
       if [ -z "$content" ] && ! run_ro cat "$f" >/dev/null 2>&1; then
         printf 'authorized_keys: %s %s UNREADABLE (need root)\n' "$u" "$ak"; unreadable_ak=1; continue
