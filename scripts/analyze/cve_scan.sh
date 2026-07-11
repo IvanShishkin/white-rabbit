@@ -57,9 +57,12 @@ OS_VER="$(grep -aE '^VERSION_ID=' "$DUMP" 2>/dev/null | head -1 | sed -E 's/^VER
 case "$OS_ID" in
   ubuntu)
     # Even-year .04 releases are LTS; OSV names their ecosystem "Ubuntu:<ver>:LTS".
+    # Omitting :LTS on an actual LTS release (e.g. 18.04) makes OSV ignore the version
+    # constraint and mass-over-match (2024 hits vs the correct ~220 on this host), so every
+    # even-year .04 back to 16.04 must be listed here.
     case "$OS_VER" in
-      20.04|22.04|24.04|26.04|28.04) ECO="Ubuntu:${OS_VER}:LTS" ;;
-      *)                             ECO="Ubuntu:${OS_VER}" ;;
+      16.04|18.04|20.04|22.04|24.04|26.04|28.04) ECO="Ubuntu:${OS_VER}:LTS" ;;
+      *)                                         ECO="Ubuntu:${OS_VER}" ;;
     esac ;;
   debian)    ECO="Debian:${OS_VER%%.*}" ;;
   almalinux) ECO="AlmaLinux:${OS_VER%%.*}" ;;
@@ -94,6 +97,30 @@ fetch_kev() {
          'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json' 2>/dev/null
   fi
 }
+
+# One compact, single-line summary per vuln id — only the fields the row loop needs (CVE
+# alias, severity, and per-package fixed versions). Kept deliberately small so that when many
+# of these run in parallel their single-line writes stay under PIPE_BUF and do not interleave
+# — this is how we get concurrency without temp files (the analyzer's read-only posture, and
+# tests/cve_scan.bats, forbid writing any file). Emits `<vid>\t<compact-json>` or `<vid>\t__MISSING__`.
+summarize_vuln() {
+  local vid dj s
+  vid="$1"
+  dj="$(fetch_osv_vuln "$vid")"
+  if [ -z "$dj" ]; then printf '%s\t__MISSING__\n' "$vid"; return; fi
+  s="$(printf '%s' "$dj" | jq -c '{
+        cve: (([.aliases[]? | select(startswith("CVE-"))][0]) // .id),
+        sev: ((.database_specific.severity // "") | ascii_downcase),
+        fixes: [ .affected[]? as $a | ($a.ranges[]?.events[]?.fixed // empty)
+                 | { n: $a.package.name, e: $a.package.ecosystem, f: . } ]
+      }' 2>/dev/null)"
+  if [ -z "$s" ] || [ "$s" = "null" ]; then printf '%s\t__MISSING__\n' "$vid"; return; fi
+  printf '%s\t%s\n' "$vid" "$s"
+}
+# Exported so the parallel `xargs … bash -c` workers can call them with the same source seam.
+export -f summarize_vuln fetch_osv_vuln
+export WR_CVE_SOURCE="${WR_CVE_SOURCE:-}"
+export TAB
 
 section cve
 note "ecosystem: $ECO"
@@ -136,39 +163,39 @@ if [ -z "$MATCHES" ]; then
 fi
 NMATCH="$(printf '%s\n' "$MATCHES" | grep -ac .)"
 
-# ---- per-vulnerability details (fetched once per unique id) ----
-DETAILS=""
-MISSING_DETAILS=0
-while IFS= read -r vid; do
-  [ -n "$vid" ] || continue
-  dj="$(fetch_osv_vuln "$vid" | jq -c '.' 2>/dev/null)"
-  if [ -z "$dj" ] || [ "$dj" = "null" ]; then
-    MISSING_DETAILS=$((MISSING_DETAILS+1)); continue
-  fi
-  DETAILS="${DETAILS}${vid}${TAB}${dj}
-"
-done <<EOF
-$(printf '%s\n' "$MATCHES" | cut -f3 | sort -u)
-EOF
+# ---- per-vulnerability summaries (fetched once per unique id, in parallel) ----
+# The dominant cost on a vulnerable host is the network: one OSV request per unique vuln id.
+# Fetch them concurrently (bounded) instead of serially — on an EOL box with hundreds of
+# matches this is the difference between seconds and many minutes. Each worker emits one small
+# summary line (see summarize_vuln); the whole result set stays in a variable, no temp files.
+NVID="$(printf '%s\n' "$MATCHES" | cut -f3 | sort -u | grep -ac . || true)"
+[ "$NVID" -gt 0 ] && printf 'WR-PROGRESS: fetching %s vulnerability record(s) from OSV.dev (parallel)...\n' "$NVID" >&2
+SUMMARIES="$(printf '%s\n' "$MATCHES" | cut -f3 | sort -u | grep -a . \
+  | xargs -P 8 -I '{}' bash -c 'summarize_vuln "$1"' _ '{}')"
+# A record we could not fetch (or whose summary line was corrupted) is marked __MISSING__ and
+# reported, never silently dropped.
+MISSING_DETAILS="$(printf '%s\n' "$SUMMARIES" | grep -c "${TAB}__MISSING__\$" 2>/dev/null || true)"
+SUMMARIES="$(printf '%s\n' "$SUMMARIES" | grep -av "${TAB}__MISSING__\$" || true)"
+[ "$NVID" -gt 0 ] && printf 'WR-PROGRESS: fetched; correlating with EPSS/KEV...\n' >&2
 
 # ---- rows: pkg, version, CVE id (alias-resolved), OSV severity, fixed version ----
 ROWS=""
 NOFIX=""
 while IFS="$TAB" read -r pkg ver vid; do
   [ -n "$pkg" ] || continue
-  dj="$(printf '%s\n' "$DETAILS" | grep -a "^${vid}${TAB}" | head -1 | cut -f2-)"
-  [ -n "$dj" ] || continue
-  cve="$(printf '%s' "$dj" | jq -r '([.aliases[]? | select(startswith("CVE-"))][0]) // .id')"
-  # Fixed version: prefer the exact ecosystem match; fall back to a name-only match
-  # (OSV sometimes carries sub-ecosystem labels like "Ubuntu:Pro:…").
-  fixed="$(printf '%s' "$dj" | jq -r --arg p "$pkg" --arg e "$ECO" '
-    ([.affected[]? | select(.package.name == $p and .package.ecosystem == $e)
-      | .ranges[]? | .events[]? | .fixed // empty][0])
-    // ([.affected[]? | select(.package.name == $p)
-      | .ranges[]? | .events[]? | .fixed // empty][0])
-    // empty')"
-  dbsev="$(printf '%s' "$dj" | jq -r '.database_specific.severity // empty' \
-           | tr '[:upper:]' '[:lower:]')"
+  sj="$(printf '%s\n' "$SUMMARIES" | grep -a "^${vid}${TAB}" | head -1 | cut -f2-)"
+  [ -n "$sj" ] || continue
+  # One jq pass over the small summary: CVE alias, severity, and the fixed version — the
+  # exact-ecosystem match preferred, else a name-only match (OSV sometimes carries
+  # sub-ecosystem labels like "Ubuntu:Pro:…"). @tsv keeps empties positional.
+  parsed="$(printf '%s' "$sj" | jq -r --arg p "$pkg" --arg e "$ECO" '
+    [ .cve,
+      (.sev // ""),
+      ( ([.fixes[]? | select(.n == $p and .e == $e) | .f][0])
+        // ([.fixes[]? | select(.n == $p) | .f][0]) // "" )
+    ] | @tsv' 2>/dev/null)"
+  if [ -z "$parsed" ]; then MISSING_DETAILS=$((MISSING_DETAILS+1)); continue; fi
+  IFS="$TAB" read -r cve dbsev fixed <<<"$parsed"
   if [ -z "$fixed" ]; then
     NOFIX="${NOFIX}${cve} (${pkg})
 "
