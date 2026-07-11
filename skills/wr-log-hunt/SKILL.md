@@ -12,6 +12,10 @@ User argument (target and/or request): "$ARGUMENTS"
 - **Fixes are suggestions only** — commands the user runs themselves.
 - **Never print secrets.** (Attacker IPs ARE the subject — print them.)
 - **Save files with the file-write tool, not a shell redirect** — the guard blocks `>`/`>>`.
+- **Output goes in one bundle directory:** create `reports/<YYYY-MM-DD>-<host>-logs/` and write
+  every artifact there with stable names — `report.md`, `findings.json`, and the raw dumps
+  (`snapshot.txt`, `logs.txt`, `web.txt`, `cve.txt`, `correlate.txt` as applicable). Use the
+  file-write tool, never a shell redirect.
 
 ## Step 1 — Resolve the target
 - Use a `user@host` from `$ARGUMENTS` (after `logs`) if present.
@@ -26,7 +30,7 @@ ssh <target> 'bash -s' < scripts/collect/log_pull.sh
 - On SSH failure, report plainly and stop. **Do not fabricate findings.**
 - The dump is organized into `===== WR-SECTION: meta|top_failed_sources|top_invalid_users|accepted_logins|daily_failed|defenses|evidence|end =====`.
 - Line formats: `top_failed_sources` = `<count> <ip> <ptr>`; `accepted_logins` = `<count> <user> <ip> <method>` (deduped — `<count>` is how many times that user+IP+method succeeded, most frequent first). A low-count accepted line (e.g. a single `root` login) is still significant — read the whole section, not just the top.
-- Save the raw dump to `reports/logs-raw-<host>-<YYYY-MM-DD>.txt` with the file-write tool.
+- Save the raw dump to `reports/<DATE>-<host>-logs/logs.txt` with the file-write tool.
 
 ## Step 3 — Triage (correlation is the point)
 Read `knowledge/checks/auth-log.md` and `knowledge/severity.md`, then:
@@ -54,7 +58,25 @@ Fix: `<command>`
 
 ### [HIGH] ...
 
+## Methodology — how this was checked (and how to reproduce)
+
+For each surface that ran, the exact command and what it reads:
+- <the collector/analyzer command used>  → reads <what>, does not read <what>.
+Re-verify any single finding from its quoted evidence, e.g.:
+- SSH config: `ssh <target> 'sshd -T' | grep -i <directive>`
+- listening ports: `ssh <target> 'ss -tulpn'`
+- a CVE row: `scripts/analyze/cve_scan.sh <bundle>/snapshot.txt | grep <cve-id>`
+State plainly which surfaces did NOT run and why (blocked, unreachable, unprivileged).
+
 🐇 read-only mode; the guardrail hook is enforcing it. Nothing on the host was modified.
 ```
-- Show the report in chat AND save it to `reports/logs-<host>-<YYYY-MM-DD>.md` with the file-write tool.
+- Show the report in chat AND save it to `reports/<DATE>-<host>-logs/report.md` with the file-write tool.
+- **Also emit `findings.json`** in the same bundle, from the same findings you just wrote — do
+  not re-parse the prose. It is a JSON object with `target, host, collected, os,
+  posture{read_only,hook_enforced}, surfaces{...}, summary{critical,high,medium,low,info}` and a
+  `findings[]` array; each finding: `id` (stable `<area>-<kebab>` slug), `severity`, `area`,
+  `title`, `evidence[]`, `why`, `fix`, `mitre` (or null), `status` (`new` on a first sweep).
+  After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-logs/findings.json`
+  and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
+  per-severity tally of `findings[]`.
 - If there are zero findings, say so and note what was checked (and how many events).

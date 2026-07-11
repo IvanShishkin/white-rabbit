@@ -13,6 +13,10 @@ User argument (target and/or request): "$ARGUMENTS"
 - **Fixes are suggestions only** — emit them as commands the user runs themselves.
 - **Save files with the file-write tool, not a shell redirect** — the guard blocks `>`/`>>`.
 - **On SSH or CVE-source failure, report plainly and stop escalating. Never fabricate findings.**
+- **Output goes in one bundle directory:** create `reports/<YYYY-MM-DD>-<host>-cve/` and write
+  every artifact there with stable names — `report.md`, `findings.json`, and the raw dumps
+  (`snapshot.txt`, `logs.txt`, `web.txt`, `cve.txt`, `correlate.txt` as applicable). Use the
+  file-write tool, never a shell redirect.
 
 ## Posture note (include in the report)
 The audited host only runs the read-only package inventory (dpkg-query/rpm). CVE matching
@@ -27,19 +31,20 @@ FIRST.org (EPSS) and CISA (KEV). If a source is unreachable the scan degrades wi
 - If you still have no real target, ask the user for `user@host` and stop. Do not invent one.
 
 ## Step 2 — Collect the package inventory (one read-only SSH pass)
-Reuse today's snapshot dump `reports/snapshot-<host>-<YYYY-MM-DD>.txt` if it exists AND
-contains a `packages` section (collector v4+). Otherwise run:
+Reuse today's snapshot dump if one already exists for this host: prefer
+`reports/<DATE>-<host>-full/snapshot.txt`, then `reports/<DATE>-<host>-server/snapshot.txt`,
+if either exists AND contains a `packages` section (collector v4+). Otherwise run:
 ```
 ssh <target> 'bash -s' < scripts/collect/server_snapshot.sh
 ```
-and save the dump to `reports/snapshot-<host>-<YYYY-MM-DD>.txt` with the file-write tool.
+and save the dump to `reports/<DATE>-<host>-cve/snapshot.txt` with the file-write tool.
 If SSH fails, report the failure plainly and stop.
 
 ## Step 3 — Match and prioritize (local, canonical path only)
 Run the scanner from the **plugin/repo root** via its repo-relative path (the guard allows
 only this exact canonical path — do not `bash …` it, do not run a copy):
 ```
-scripts/analyze/cve_scan.sh reports/snapshot-<host>-<YYYY-MM-DD>.txt
+scripts/analyze/cve_scan.sh <the snapshot.txt path resolved in Step 2>
 ```
 It emits a `cve` section: `WR-CVE: <pkg> <installed> <cve-id> sev=… epss=… kev=… fixed=…`
 lines sorted critical→low, `WR-CVE-SUPPRESSED:` lines (VEX rules from `targets/vex.txt`),
@@ -57,7 +62,15 @@ Apply `knowledge/checks/cve.md` and `knowledge/severity.md`. Key rules:
 
 ## Step 5 — Report
 Markdown, sorted by severity; show it in chat AND save to
-`reports/cve-<host>-<YYYY-MM-DD>.md` with the file-write tool:
+`reports/<DATE>-<host>-cve/report.md` with the file-write tool.
+- **Also emit `findings.json`** in the same bundle, from the same findings you just wrote — do
+  not re-parse the prose. It is a JSON object with `target, host, collected, os,
+  posture{read_only,hook_enforced}, surfaces{...}, summary{critical,high,medium,low,info}` and a
+  `findings[]` array; each finding: `id` (stable `<area>-<kebab>` slug), `severity`, `area`,
+  `title`, `evidence[]`, `why`, `fix`, `mitre` (or null), `status` (`new` on a first sweep).
+  After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-cve/findings.json`
+  and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
+  per-severity tally of `findings[]`.
 ```
 # White Rabbit — OS-package CVE check: <host>
 ecosystem: <from the cve section note> · collected: <date> · posture: strictly read-only
@@ -75,6 +88,16 @@ Fix: `sudo apt-get install --only-upgrade <pkg>`   (target version: <fixed=…>)
 
 ## Suppressed (VEX)
 <WR-CVE-SUPPRESSED lines with their justifications, or "none">
+
+## Methodology — how this was checked (and how to reproduce)
+
+For each surface that ran, the exact command and what it reads:
+- <the collector/analyzer command used>  → reads <what>, does not read <what>.
+Re-verify any single finding from its quoted evidence, e.g.:
+- SSH config: `ssh <target> 'sshd -T' | grep -i <directive>`
+- listening ports: `ssh <target> 'ss -tulpn'`
+- a CVE row: `scripts/analyze/cve_scan.sh <bundle>/snapshot.txt | grep <cve-id>`
+State plainly which surfaces did NOT run and why (blocked, unreachable, unprivileged).
 
 ## Coverage
 <package count scanned, matches, actionable count, degradation notes, posture note>

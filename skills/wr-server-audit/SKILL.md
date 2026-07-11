@@ -14,6 +14,10 @@ User argument (target and/or request): "$ARGUMENTS"
 - **Never read or print secrets** (private keys, `.env`). The collector reads only the
   effective SSH config, never key material.
 - **Save files with the file-write tool, not a shell redirect** — the guard blocks `>`/`>>`.
+- **Output goes in one bundle directory:** create `reports/<YYYY-MM-DD>-<host>-server/` and write
+  every artifact there with stable names — `report.md`, `findings.json`, and the raw dumps
+  (`snapshot.txt`, `logs.txt`, `web.txt`, `cve.txt`, `correlate.txt` as applicable). Use the
+  file-write tool, never a shell redirect.
 
 ## Step 1 — Resolve the target
 - If `$ARGUMENTS` contains a `user@host` (after the word `server`), use it.
@@ -34,7 +38,7 @@ ssh <target> 'bash -s' < scripts/collect/server_snapshot.sh
   `WR-NOTE:` annotations and `WR-TOOL:` firewall blocks.
 - The collector reads a filesystem-root prefix via `WR_ROOT` (empty in production); you never
   set it. Shadow hashes and SSH key blobs are never emitted — only presence/comments.
-- Save the raw dump to `reports/snapshot-<host>-<YYYY-MM-DD>.txt` using the file-write tool.
+- Save the raw dump to `reports/<DATE>-<host>-server/snapshot.txt` using the file-write tool.
 
 ## Step 3 — Triage
 Read these catalogs and apply them to the matching dump sections:
@@ -88,8 +92,26 @@ Fix: `<command>`
 ### [HIGH] ...
 ...
 
+## Methodology — how this was checked (and how to reproduce)
+
+For each surface that ran, the exact command and what it reads:
+- <the collector/analyzer command used>  → reads <what>, does not read <what>.
+Re-verify any single finding from its quoted evidence, e.g.:
+- SSH config: `ssh <target> 'sshd -T' | grep -i <directive>`
+- listening ports: `ssh <target> 'ss -tulpn'`
+- a CVE row: `scripts/analyze/cve_scan.sh <bundle>/snapshot.txt | grep <cve-id>`
+State plainly which surfaces did NOT run and why (blocked, unreachable, unprivileged).
+
 🐇 read-only mode; the guardrail hook is enforcing it.
 ```
-- Show the report in the chat AND save it to `reports/server-<host>-<YYYY-MM-DD>.md` with the
+- Show the report in the chat AND save it to `reports/<DATE>-<host>-server/report.md` with the
   file-write tool.
+- **Also emit `findings.json`** in the same bundle, from the same findings you just wrote — do
+  not re-parse the prose. It is a JSON object with `target, host, collected, os,
+  posture{read_only,hook_enforced}, surfaces{...}, summary{critical,high,medium,low,info}` and a
+  `findings[]` array; each finding: `id` (stable `<area>-<kebab>` slug), `severity`, `area`,
+  `title`, `evidence[]`, `why`, `fix`, `mitre` (or null), `status` (`new` on a first sweep).
+  After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-server/findings.json`
+  and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
+  per-severity tally of `findings[]`.
 - If there are zero findings, say so plainly and list what was checked.

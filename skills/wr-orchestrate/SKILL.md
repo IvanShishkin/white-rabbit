@@ -15,6 +15,10 @@ User argument (target and/or request): "$ARGUMENTS"
 - **Never print secrets** (keys, `.env`). The collectors never emit key material or password hashes.
 - **Save files with the file-write tool, not a shell redirect** — the guard blocks `>`/`>>`.
 - **On SSH failure, report plainly and stop. Do not fabricate findings.**
+- **Output goes in one bundle directory:** create `reports/<YYYY-MM-DD>-<host>-full/` and write
+  every artifact there with stable names — `report.md`, `findings.json`, and the raw dumps
+  (`snapshot.txt`, `logs.txt`, `web.txt`, `cve.txt`, `correlate.txt` as applicable). Use the
+  file-write tool, never a shell redirect.
 
 ## Step 1 — Resolve the target
 - Use a `user@host` from `$ARGUMENTS` (after `all`/`full`) if present.
@@ -27,9 +31,9 @@ SSH pass fails, note it, keep the others, and continue (a partial sweep is still
 Use ssh keepalive flags on every pass — the collectors run heavy server-side work and a quiet
 channel is otherwise reaped with **exit 255** mid-collection (seen on a 1.3M-request host):
 ```
-ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/server_snapshot.sh   → reports/snapshot-<host>-<DATE>.txt
-ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/log_pull.sh          → reports/logs-raw-<host>-<DATE>.txt
-ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/web_pull.sh          → reports/web-raw-<host>-<DATE>.txt
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/server_snapshot.sh   → reports/<DATE>-<host>-full/snapshot.txt
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/log_pull.sh          → reports/<DATE>-<host>-full/logs.txt
+ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 <target> 'bash -s' < scripts/collect/web_pull.sh          → reports/<DATE>-<host>-full/web.txt
 ```
 (`<DATE>` = today, `YYYY-MM-DD`.) If you know the site's public hostname, you may prefix the web
 collector with `WR_WEB_HOST=<domain>` to sharpen its header-anomaly check. The web collector
@@ -41,7 +45,7 @@ Run the correlator on the SSH-auth and web-access dumps from the **plugin/repo r
 It is read-only; the guard allows it only when this exact canonical path resolves, so invoke it
 via the repo-relative path below (not a copy elsewhere), and do not `bash …` it:
 ```
-scripts/analyze/correlate.sh reports/logs-raw-<host>-<DATE>.txt reports/web-raw-<host>-<DATE>.txt
+scripts/analyze/correlate.sh reports/<DATE>-<host>-full/logs.txt reports/<DATE>-<host>-full/web.txt
 ```
 If the guard blocks it or it errors (e.g. missing exec bit, wrong cwd), say so in the Coverage
 section rather than silently omitting the cross_correlation results.
@@ -54,7 +58,7 @@ the single most important thing in the report. If either log dump is missing, sk
 Run the CVE scanner on the server snapshot dump, from the **plugin/repo root** via the exact
 repo-relative path below (the guard allows only this canonical path; do not `bash …` it):
 ```
-scripts/analyze/cve_scan.sh reports/snapshot-<host>-<DATE>.txt
+scripts/analyze/cve_scan.sh reports/<DATE>-<host>-full/snapshot.txt
 ```
 It emits a `cve` section (`WR-CVE: <pkg> <installed> <cve-id> sev=… epss=… kev=… fixed=…`,
 sorted critical→low, plus `WR-CVE-SUPPRESSED:` VEX lines and degradation notes). In live mode
@@ -76,7 +80,7 @@ sensitive path + 2xx → confirmed exposure; SSH success from a brute-forcing IP
 
 ## Step 5 — Delta against the previous run
 Look in `reports/` for the most recent prior unified report for this host
-(`reports/full-<host>-*.md`, excluding today's). If one exists, compare findings and mark each in
+(`reports/*-<host>-full/report.md`, excluding today's). If one exists, compare findings and mark each in
 today's report as **[NEW]**, **[UNCHANGED]**, or **[RESOLVED]** (present before, gone now). If no
 prior report exists, say "no baseline — first full sweep" and skip the delta. Never invent a
 baseline.
@@ -101,6 +105,16 @@ Fix: `<suggested command from the catalog>`
 ### [HIGH] ...
 ...
 
+## Methodology — how this was checked (and how to reproduce)
+
+For each surface that ran, the exact command and what it reads:
+- <the collector/analyzer command used>  → reads <what>, does not read <what>.
+Re-verify any single finding from its quoted evidence, e.g.:
+- SSH config: `ssh <target> 'sshd -T' | grep -i <directive>`
+- listening ports: `ssh <target> 'ss -tulpn'`
+- a CVE row: `scripts/analyze/cve_scan.sh <bundle>/snapshot.txt | grep <cve-id>`
+State plainly which surfaces did NOT run and why (blocked, unreachable, unprivileged).
+
 ## Coverage
 Which of the three collectors succeeded, whether correlation and the CVE scan ran (and any
 degraded CVE sources), and any WR-NOTE caveats
@@ -108,5 +122,13 @@ degraded CVE sources), and any WR-NOTE caveats
 
 🐇 read-only mode; the guardrail hook is enforcing it. Nothing on the host was modified.
 ```
-- Show the report in chat AND save it to `reports/full-<host>-<YYYY-MM-DD>.md` with the file-write tool.
+- Show the report in chat AND save it to `reports/<DATE>-<host>-full/report.md` with the file-write tool.
+- **Also emit `findings.json`** in the same bundle, from the same findings you just wrote — do
+  not re-parse the prose. It is a JSON object with `target, host, collected, os,
+  posture{read_only,hook_enforced}, surfaces{...}, summary{critical,high,medium,low,info}` and a
+  `findings[]` array; each finding: `id` (stable `<area>-<kebab>` slug), `severity`, `area`,
+  `title`, `evidence[]`, `why`, `fix`, `mitre` (or null), `status` (`new` on a first sweep).
+  After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-full/findings.json`
+  and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
+  per-severity tally of `findings[]`.
 - If a domain produced zero findings, say so for that domain rather than omitting it.
