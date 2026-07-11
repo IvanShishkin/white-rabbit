@@ -1,0 +1,17 @@
+{
+  "target": "10.0.0.1",
+  "host": "testbox",
+  "collected": "2026-07-11",
+  "os": "Ubuntu 24.04 LTS",
+  "posture": { "read_only": true, "hook_enforced": true },
+  "surfaces": { "server": "ok", "ssh_logs": "not_collected", "web_logs": "not_collected", "cve": "ok" },
+  "summary": { "critical": 1, "high": 0, "medium": 1, "low": 0, "info": 0 },
+  "findings": [
+    { "id": "patching-eol", "severity": "critical", "area": "patching",
+      "title": "EOL release", "evidence": ["PRETTY_NAME=..."], "why": "no patches",
+      "fix": "upgrade", "mitre": null, "status": "new" },
+    { "id": "ssh-root-login", "severity": "medium", "area": "ssh",
+      "title": "root login by key", "evidence": ["permitrootlogin without-password"],
+      "why": "bypasses sudo trail", "fix": "PermitRootLogin no", "mitre": null, "status": "new" }
+  ]
+}

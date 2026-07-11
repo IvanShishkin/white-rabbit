@@ -18,6 +18,7 @@ WR_ROOT_DIR="$(cd "$(dirname "$POLICY_DIR")" 2>/dev/null && pwd || true)"
 WR_CORRELATOR="${WR_ROOT_DIR}/scripts/analyze/correlate.sh"
 WR_CVE_SCANNER="${WR_ROOT_DIR}/scripts/analyze/cve_scan.sh"
 WR_EXT_LIST="${WR_ROOT_DIR}/scripts/extensions/list.sh"
+WR_VALIDATE_FINDINGS="${WR_ROOT_DIR}/scripts/report/validate_findings.sh"
 
 # Fail closed if jq is unavailable: we cannot safely parse input, so block (exit 2).
 if ! command -v jq >/dev/null 2>&1; then
@@ -88,7 +89,7 @@ while IFS= read -r seg; do
     if fdir="$(cd "$(dirname -- "$first")" 2>/dev/null && pwd)"; then
       canon="$fdir/$(basename -- "$first")"
       case "$canon" in
-        "$WR_CORRELATOR"|"$WR_CVE_SCANNER"|"$WR_EXT_LIST") continue ;;
+        "$WR_CORRELATOR"|"$WR_CVE_SCANNER"|"$WR_EXT_LIST"|"$WR_VALIDATE_FINDINGS") continue ;;
       esac
     fi
   fi
