@@ -131,4 +131,8 @@ degraded CVE sources), and any WR-NOTE caveats
   After writing it, run `scripts/report/validate_findings.sh reports/<DATE>-<host>-full/findings.json`
   and fix any `WR-VALIDATE: FAIL` line before finishing. The `summary` counts MUST equal the
   per-severity tally of `findings[]`.
+- **Then render `report.html`** — once findings.json validates, run
+  `scripts/report/render_html.sh reports/<DATE>-<host>-full/findings.json`, capture its stdout, and
+  save it as `reports/<DATE>-<host>-full/report.html` with the file-write tool (never a `>`-redirect
+  — the guard blocks that). The renderer is deterministic, read-only, and self-contained.
 - If a domain produced zero findings, say so for that domain rather than omitting it.
