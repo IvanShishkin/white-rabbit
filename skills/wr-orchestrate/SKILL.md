@@ -94,12 +94,20 @@ Apply each catalog to its dump sections (same rules the per-domain skills use):
 Carry over the key single-surface correlations too (Docker published port + active ufw → still open;
 sensitive path + 2xx → confirmed exposure; SSH success from a brute-forcing IP → possible breach).
 
-## Step 5 — Delta against the previous run
-Look in `reports/` for the most recent prior unified report for this host
-(`reports/*-<host>-full/report.md`, excluding today's). If one exists, compare findings and mark each in
-today's report as **[NEW]**, **[UNCHANGED]**, or **[RESOLVED]** (present before, gone now). If no
-prior report exists, say "no baseline — first full sweep" and skip the delta. Never invent a
-baseline.
+## Step 5 — Delta against the previous run (structured diff)
+Look in `reports/` for the most recent prior full bundle for this host
+(`reports/*-<host>-full/findings.json`, excluding today's). If one exists, write today's
+`findings.json` FIRST (Step 6), then run the differ from the repo root via its canonical path
+(guard-allowed; do not `bash …` it):
+```
+scripts/report/diff_findings.sh <prior>/findings.json reports/<DATE>-<host>-full/findings.json
+```
+It emits a `diff` section: `WR-DIFF-SUMMARY: new=… still_open=… resolved=…` then one
+`WR-DIFF: <id> <NEW|STILL-OPEN|RESOLVED> sev=… [was=<old-sev>] title=…` line per finding (NEW →
+STILL-OPEN → RESOLVED). Use it to tag each finding in today's report **[NEW]**, **[UNCHANGED]**
+(STILL-OPEN; note a severity change), or **[RESOLVED]**, and to lead the Summary with the counts.
+The join is by finding `id`, so keep ids stable across runs. If no prior bundle exists, say
+"no baseline — first full sweep" and skip the delta. Never invent a baseline.
 
 ## Step 6 — One unified report
 Markdown, a single list sorted by severity (critical → info), findings from all domains merged:

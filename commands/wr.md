@@ -21,7 +21,9 @@ User argument (the audit domain or request): "$ARGUMENTS"
   login brute-force, header anomalies); `cve` — run `/wr cve [user@host]` to check installed
   OS packages against known CVEs (KEV/EPSS-prioritized, with fixed versions); `all` — run
   `/wr all [user@host]` for a complete sweep (all collectors + cross-surface IP correlation +
-  CVE check + delta vs the last run, in one report).
+  CVE check + service-EOL check + delta vs the last run, in one report); `retry` — run
+  `/wr retry [bundle-dir] [user@host]` to re-check against a prior report and show what was
+  resolved, what is still open, and what is new.
   Then run `scripts/extensions/list.sh` by its direct path (relative from the plugin root, or
   absolute under it — the guard vets it by canonical path; do **not** run it via `bash …`, that
   is blocked) and announce each discovered extension by name and description; if the output is
@@ -32,6 +34,13 @@ User argument (the audit domain or request): "$ARGUMENTS"
   **wr-orchestrate** skill, passing along any `user@host`. That skill runs all three read-only
   collectors, cross-correlates attacker IPs across the SSH and web surfaces, diffs against the
   previous run, and produces one unified severity-sorted report.
+- If `$ARGUMENTS` starts with `retry` (optionally followed by a prior bundle dir and/or `user@host`):
+  invoke the **wr-orchestrate** skill in re-check mode. This is a full sweep whose point is the
+  **delta**: use the given `reports/<...>-full/` bundle as the baseline (or, with no dir, the most
+  recent prior full bundle for the resolved host), run the sweep into a fresh bundle, run
+  `scripts/report/diff_findings.sh <baseline>/findings.json <new>/findings.json`, and lead the
+  report with the `WR-DIFF-SUMMARY` (resolved / still-open / new) — confirming what the last run's
+  fixes actually changed. If no baseline bundle exists, say so and fall back to a normal full sweep.
 - If `$ARGUMENTS` starts with `server` (optionally followed by `user@host`): invoke the
   **wr-server-audit** skill, passing along any `user@host`. That skill runs the read-only
   server snapshot and produces a triaged report.
