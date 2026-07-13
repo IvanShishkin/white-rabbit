@@ -110,6 +110,41 @@ Read-only posture is defined in two places:
   scripts are trusted by *exact canonical path*, never by basename, so a same-named script planted
   elsewhere does not pass.
 
+### Turning enforcement on
+
+The guard **denies by default** — everything not on the read-only allowlist — so it belongs in a
+session that does nothing but audit, not one where you also develop or run other tooling. Enable it
+in one of two ways:
+
+- **As the plugin.** Enabling White Rabbit as a Claude Code plugin wires the guard via
+  `hooks/hooks.json` for every session the plugin is active in. Keep it enabled only in
+  audit-dedicated setups.
+- **As a marker-gated hook** *(recommended if you keep it installed all the time)*. Add a
+  `PreToolUse` hook that stays dormant until you opt a session in with the `WR_ENFORCE` marker, so
+  your normal sessions are untouched:
+
+  ```json
+  {
+    "matcher": "Bash",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "if [ \"${WR_ENFORCE:-}\" = \"1\" ]; then exec /abs/path/to/white-rabbit/hooks/guard.sh; fi"
+      }
+    ]
+  }
+  ```
+
+  Then launch a read-only audit session with the marker set:
+
+  ```bash
+  WR_ENFORCE=1 claude
+  ```
+
+  In that session every mutating or non-allowlisted `Bash` command is blocked by `guard.sh`;
+  sessions without the marker are completely unaffected. Hooks load at session start, so set the
+  marker at launch — a session started without it is not guarded.
+
 ## Extensions
 
 You can plug external agent projects into White Rabbit by symlinking them into `extensions/`
